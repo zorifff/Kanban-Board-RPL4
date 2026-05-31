@@ -36,7 +36,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const member = project.members.find(m => m.id_user === userId);
+    const member = project.members.find((m: any) => m.id_user === userId);
     if (!member) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
