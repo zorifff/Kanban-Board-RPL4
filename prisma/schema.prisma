@@ -101,6 +101,7 @@ model tb_invitations {
   id_project    Int
   id_inviter    Int
   id_invitee    Int
+  type          String   @default("project") // "project" or "role_change"
   status        String   @default("pending") // pending, accepted, rejected
   created_at    DateTime @default(now()) @db.Timestamp()
 

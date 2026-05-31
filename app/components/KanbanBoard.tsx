@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { useSession, signOut } from "next-auth/react";
 import DeadlineBadge from "./DeadlineBadge";
+import CustomModal from "./CustomModal";
 
 // 1. Definisi Tipe Data (Sesuai SRS)
 type Task = {
@@ -66,6 +67,15 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isViewProfileModalOpen, setIsViewProfileModalOpen] = useState(false);
   const [sortBy, setSortBy] = useState("default");
+  const [modalState, setModalState] = useState<{
+    isOpen: boolean;
+    title?: string;
+    message: string;
+    type: "alert" | "confirm";
+    variant: "info" | "success" | "warning" | "danger";
+    onConfirm: () => void;
+    onCancel?: () => void;
+  }>({ isOpen: false, message: "", type: "alert", variant: "info", onConfirm: () => {} });
   
   // Backward compatibility untuk handleSort lama jika ada yg pakai
   const [sortOption, setSortOption] = useState<string>("A-Z");
@@ -144,12 +154,12 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
           newData.tasks[taskId] = {
             id: taskId,
             dbId: task.id_task,
-            content: task.deskripsi || "Tanpa Deskripsi",
+            content: task.deskripsi || "No Description",
             judul_task: task.judul_task || "",
             id_user: task.id_user || "",
             id_kategori: task.id_kategori || "",
             deadline: task.deadline || "",
-            kategori: task.kategori?.nama_kategori || "Umum",
+            kategori: task.kategori?.nama_kategori || "General",
             warnaKategori: task.kategori?.kode_warna || "#ccc",
             nama_user: userMap[task.id_user] || "Unknown"
           };
@@ -187,22 +197,22 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
           return taskA.judul_task.localeCompare(taskB.judul_task);
         } else if (sortType === "Z-A") {
           return taskB.judul_task.localeCompare(taskA.judul_task);
-        } else if (sortType === "Kategori (Low - High)") {
+        } else if (sortType === "Category (Low - High)") {
           const priority = { "low": 1, "medium": 2, "high": 3 } as Record<string, number>;
           const pA = priority[taskA.kategori.toLowerCase()] || 0;
           const pB = priority[taskB.kategori.toLowerCase()] || 0;
           return pA - pB;
-        } else if (sortType === "Kategori (High - Low)") {
+        } else if (sortType === "Category (High - Low)") {
           const priority = { "low": 1, "medium": 2, "high": 3 } as Record<string, number>;
           const pA = priority[taskA.kategori.toLowerCase()] || 0;
           const pB = priority[taskB.kategori.toLowerCase()] || 0;
           return pB - pA;
-        } else if (sortType === "Deadline (Terdekat)") {
+        } else if (sortType === "Deadline (Nearest)") {
           if (!taskA.deadline && !taskB.deadline) return 0;
           if (!taskA.deadline) return 1;
           if (!taskB.deadline) return -1;
           return new Date(taskA.deadline).getTime() - new Date(taskB.deadline).getTime();
-        } else if (sortType === "Deadline (Terjauh)") {
+        } else if (sortType === "Deadline (Furthest)") {
           if (!taskA.deadline && !taskB.deadline) return 0;
           if (!taskA.deadline) return 1;
           if (!taskB.deadline) return -1;
@@ -234,7 +244,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
         setComments(data);
       }
     } catch (error) {
-      console.error("Gagal mengambil komentar:", error);
+      console.error("Failed to fetch comments:", error);
     } finally {
       setIsLoadingComments(false);
     }
@@ -302,7 +312,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
         body: JSON.stringify({ id_task: task.dbId, status: "DONE" }),
       });
     } catch (error) {
-      console.error("Gagal update status:", error);
+      console.error("Failed to update status:", error);
     }
   };
 
@@ -350,41 +360,36 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
 
   // --- LOGIKA HAPUS TUGAS (DELETE) ---
   const handleDeleteTask = async (taskId: string, dbId: number) => {
-    // Munculkan pop-up konfirmasi bawaan browser
-    const isConfirmed = window.confirm("Apakah kamu yakin ingin menghapus tugas ini?");
-    if (!isConfirmed) return;
+    setModalState({
+      isOpen: true,
+      title: "Delete Task",
+      message: "Are you sure you want to delete this task?",
+      type: "confirm",
+      variant: "danger",
+      onConfirm: async () => {
+        setModalState(prev => ({ ...prev, isOpen: false }));
+        try {
+          const res = await fetch('/api/tasks', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id_task: dbId }),
+          });
 
-    try {
-      const res = await fetch('/api/tasks', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id_task: dbId }),
-      });
+          if (!res.ok) throw new Error("Failed to delete task");
 
-      if (!res.ok) throw new Error("Gagal menghapus tugas");
-
-      // Hapus data dari state UI agar kartu langsung hilang tanpa refresh
-      const newData = { ...data };
-
-
-
-      // Cari kolom yang berisi task tersebut dan hapus ID-nya dari array
-      for (const colId of newData.columnOrder) {
-        newData.columns[colId].taskIds = newData.columns[colId].taskIds.filter(id => id !== taskId);
-      }
-
-
-
-      // Hapus detail task dari object tasks
-      delete newData.tasks[taskId];
-
-
-
-      setData(newData);
-    } catch (error) {
-      console.error("Terjadi kesalahan:", error);
-      alert("Gagal menghapus tugas.");
-    }
+          const newData = { ...data };
+          for (const colId of newData.columnOrder) {
+            newData.columns[colId].taskIds = newData.columns[colId].taskIds.filter(id => id !== taskId);
+          }
+          delete newData.tasks[taskId];
+          setData(newData);
+        } catch (error) {
+          console.error("An error occurred:", error);
+          setModalState({ isOpen: true, message: "Failed to delete task.", type: "alert", variant: "danger", onConfirm: () => setModalState(prev => ({ ...prev, isOpen: false })) });
+        }
+      },
+      onCancel: () => setModalState(prev => ({ ...prev, isOpen: false }))
+    });
   };
 
 
@@ -410,33 +415,40 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
         setNewComment("");
       } else {
         const errorData = await res.json();
-        alert(`Gagal mengirim komentar: ${errorData.error}`);
+        setModalState({ isOpen: true, message: `Failed to send comment: ${errorData.error}`, type: "alert", variant: "danger", onConfirm: () => setModalState(prev => ({ ...prev, isOpen: false })) });
       }
     } catch (error) {
-      console.error("Gagal mengirim komentar:", error);
-      alert("Terjadi kesalahan saat mengirim komentar.");
+      console.error("Failed to send comment:", error);
+      setModalState({ isOpen: true, message: "An error occurred while sending comment.", type: "alert", variant: "danger", onConfirm: () => setModalState(prev => ({ ...prev, isOpen: false })) });
     } finally {
       setIsSubmittingComment(false);
     }
   };
 
   const handleDeleteComment = async (commentId: number) => {
-    const isConfirmed = window.confirm("Apakah kamu yakin ingin menghapus komentar ini?");
-    if (!isConfirmed) return;
-
-    try {
-      const res = await fetch(`/api/comments?id=${commentId}`, {
-        method: 'DELETE',
-      });
-
-      if (res.ok) {
-        setComments(comments.filter(c => c.id_komentar !== commentId));
-      } else {
-        alert("Gagal menghapus komentar");
-      }
-    } catch (error) {
-      console.error("Gagal menghapus komentar:", error);
-    }
+    setModalState({
+      isOpen: true,
+      title: "Delete Comment",
+      message: "Are you sure you want to delete this comment?",
+      type: "confirm",
+      variant: "danger",
+      onConfirm: async () => {
+        setModalState(prev => ({ ...prev, isOpen: false }));
+        try {
+          const res = await fetch(`/api/comments?id=${commentId}`, {
+            method: 'DELETE',
+          });
+          if (res.ok) {
+            setComments(comments.filter(c => c.id_komentar !== commentId));
+          } else {
+            setModalState({ isOpen: true, message: "Failed to delete comment", type: "alert", variant: "danger", onConfirm: () => setModalState(prev => ({ ...prev, isOpen: false })) });
+          }
+        } catch (error) {
+          console.error("Failed to delete comment:", error);
+        }
+      },
+      onCancel: () => setModalState(prev => ({ ...prev, isOpen: false }))
+    });
   };
 
   const handleUpdateComment = async (commentId: number) => {
@@ -458,10 +470,10 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
         setEditingCommentId(null);
         setEditCommentText("");
       } else {
-        alert("Gagal mengupdate komentar");
+        setModalState({ isOpen: true, message: "Failed to update comment", type: "alert", variant: "danger", onConfirm: () => setModalState(prev => ({ ...prev, isOpen: false })) });
       }
     } catch (error) {
-      console.error("Gagal mengupdate komentar:", error);
+      console.error("Failed to update comment:", error);
     }
   };
 
@@ -551,12 +563,12 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
       setEditingTask(null);
       setIsModalOpen(false);
     } catch (error) {
-      console.error("Terjadi kesalahan:", error);
-      alert("Gagal menyimpan tugas. Coba lagi!");
+      console.error("An error occurred:", error);
+      setModalState({ isOpen: true, message: "Failed to save task. Try again!", type: "alert", variant: "danger", onConfirm: () => setModalState(prev => ({ ...prev, isOpen: false })) });
     }
   };
 
-  if (isLoading) return <div className="p-8 text-center text-black flex items-center justify-center min-h-screen">Memuat data dari Neon...</div>;
+  if (isLoading) return <div className="p-8 text-center text-black flex items-center justify-center min-h-screen">Loading data...</div>;
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 font-sans">
@@ -658,7 +670,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="m15 18-6-6 6-6"/>
             </svg>
-            Kembali ke Dashboard
+            Back to Dashboard
           </button>
         </div>
 
@@ -666,10 +678,10 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
         <div className="w-full sm:h-44 bg-gradient-to-br from-[#F5FEFF] to-[#AAC0E1] rounded-2xl shadow-sm border border-blue-100 p-8 flex flex-col sm:flex-row justify-between items-center gap-6 sm:gap-0 relative overflow-hidden">
           <div className="flex flex-col gap-2 relative z-10 w-full sm:w-2/3">
             <h1 className="text-blue-900 text-[28px] sm:text-4xl font-bold font-['Inter'] leading-10">
-              {projectTitle ? projectTitle : `Selamat Datang, ${session?.user?.name?.split(' ')[0] || "User"}!`}
+              {projectTitle ? projectTitle : `Welcome, ${session?.user?.name?.split(' ')[0] || "User"}!`}
             </h1>
             <p className="text-slate-600 text-base sm:text-lg font-normal font-['Inter'] leading-7">
-              {projectDesc ? projectDesc : "Mari kelola dan selesaikan pekerjaan Anda hari ini dengan lebih produktif"}
+              {projectDesc ? projectDesc : "Let's manage and complete your tasks today more productively"}
             </p>
           </div>
           <div className="bg-white rounded-2xl shadow-md border border-blue-200 w-28 h-28 flex flex-col justify-center items-center relative z-10 flex-shrink-0">
@@ -690,13 +702,13 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                 onChange={(e) => setSortBy(e.target.value)}
                 className="appearance-none border border-black/10 rounded-[10px] bg-white text-[13px] font-semibold font-['Inter'] px-4 py-2.5 pr-10 text-slate-700 outline-none hover:shadow-md transition-shadow cursor-pointer focus:ring-2 focus:ring-blue-500/50"
               >
-                <option value="default">Sortir: Default</option>
-                <option value="A-Z">Abjad (A - Z)</option>
-                <option value="Z-A">Abjad (Z - A)</option>
-                <option value="Priority-Low">Prioritas (Low - High)</option>
-                <option value="Priority-High">Prioritas (High - Low)</option>
-                <option value="Deadline-Terdekat">Deadline (Terdekat)</option>
-                <option value="Deadline-Terjauh">Deadline (Terjauh)</option>
+                <option value="default">Sort by: Default</option>
+                <option value="A-Z">Alphabetical (A - Z)</option>
+                <option value="Z-A">Alphabetical (Z - A)</option>
+                <option value="Priority-Low">Priority (Low - High)</option>
+                <option value="Priority-High">Priority (High - Low)</option>
+                <option value="Deadline-Terdekat">Deadline (Nearest)</option>
+                <option value="Deadline-Terjauh">Deadline (Furthest)</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
@@ -744,17 +756,17 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
               let countTextColor = "";
               let plusIconColor = "";
               if (columnId === "TODO") {
-                 titleText = "Belum Dikerjakan";
+                 titleText = "To Do";
                  countBgColor = "bg-red-100";
                  countTextColor = "text-black";
                  plusIconColor = "text-red-600";
               } else if (columnId === "DOING") {
-                 titleText = "Sedang Dikerjakan";
+                 titleText = "In Progress";
                  countBgColor = "bg-yellow-50";
                  countTextColor = "text-black";
                  plusIconColor = "text-orange-500";
               } else if (columnId === "DONE") {
-                 titleText = "Selesai";
+                 titleText = "Done";
                  countBgColor = "bg-green-100";
                  countTextColor = "text-black";
                  plusIconColor = "text-green-700";
@@ -778,7 +790,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                           setFormData({ judul_task: "", deskripsi: "", id_user: "", id_kategori: "", deadline: "" });
                           setIsModalOpen(true);
                         }}
-                        title="Tambah Task Baru"
+                        title="Add New Task"
                       >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.67" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"></path>
@@ -860,7 +872,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                                   
                                   {/* Description */}
                                   <div className="text-gray-500 text-[13px] font-normal font-['Inter'] leading-4 line-clamp-2">
-                                    {task.content || "Tanpa Deskripsi"}
+                                    {task.content || "No description"}
                                   </div>
 
                                   {/* Info Items */}
@@ -878,7 +890,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
                                       </svg>
                                       <span className="px-1.5 py-0.5 rounded-sm text-[11px] font-medium font-['Inter']" style={{ backgroundColor: (task.warnaKategori || '#A855F7') + '22', color: '#000000' }}>
-                                        {task.kategori || "Umum"}
+                                        {task.kategori || "General"}
                                       </span>
                                     </div>
                                     {/* Date */}
@@ -897,7 +909,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                         {/* Empty State */}
                         {tasks.length === 0 && (
                           <div className="w-full flex justify-center items-center py-6 text-gray-400 text-sm font-normal font-['Inter']">
-                            Belum ada task
+                            No tasks yet
                           </div>
                         )}
                       </div>
@@ -925,9 +937,9 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
               <div className="space-y-6">
                 {/* Deskripsi */}
                 <div>
-                  <label className="block text-sm font-semibold text-[#0E2F76] mb-2">Deskripsi</label>
+                  <label className="block text-sm font-semibold text-[#0E2F76] mb-2">Description</label>
                   <p className="text-[#0E2F76]/80 text-base leading-relaxed bg-white/60 shadow-sm border border-white/50 p-4 rounded-xl min-h-24">
-                    {selectedTask.content || "Tidak ada deskripsi"}
+                    {selectedTask.content || "No description"}
                   </p>
                 </div>
 
@@ -935,7 +947,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {/* User */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#0E2F76] uppercase mb-2">Penanggung Jawab</label>
+                    <label className="block text-xs font-semibold text-[#0E2F76] uppercase mb-2">Assignee</label>
                     <div className="flex items-center gap-2 bg-white/60 shadow-sm border border-white/50 p-3 rounded-xl">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-400 to-[#0E2F76] text-white text-xs font-bold flex items-center justify-center flex-shrink-0">
                         {getInitials(selectedTask.nama_user || "U")}
@@ -946,11 +958,11 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
 
                   {/* Kategori */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#0E2F76] uppercase mb-2">Kategori</label>
+                    <label className="block text-xs font-semibold text-[#0E2F76] uppercase mb-2">Category</label>
                     <div className="bg-white/60 shadow-sm border border-white/50 p-3 rounded-xl flex items-center">
                       <div className="h-[32px] flex items-center">
                         <span className="px-2 py-0.5 rounded-sm text-[11px] font-semibold font-['Inter'] uppercase" style={{ backgroundColor: (selectedTask.warnaKategori || '#A855F7') + '22', color: '#000000' }}>
-                          {selectedTask.kategori || "Umum"}
+                          {selectedTask.kategori || "General"}
                         </span>
                       </div>
                     </div>
@@ -989,14 +1001,14 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
 
               {/* Diskusi Tim */}
               <div className="mt-8 pt-2">
-                <h3 className="text-lg font-bold text-[#0E2F76] mb-4">Diskusi Tim</h3>
+                <h3 className="text-lg font-bold text-[#0E2F76] mb-4">Team Discussion</h3>
 
                 {/* Daftar Komentar */}
                 <div className="space-y-4 mb-6 max-h-60 overflow-y-auto pr-2 custom-scrollbar">
                   {isLoadingComments ? (
-                    <p className="text-center text-sm text-[#0E2F76]/60">Memuat komentar...</p>
+                    <p className="text-center text-sm text-[#0E2F76]/60">Loading comments...</p>
                   ) : comments.length === 0 ? (
-                    <p className="text-center text-sm text-[#0E2F76]/60">Belum ada diskusi untuk tugas ini.</p>
+                    <p className="text-center text-sm text-[#0E2F76]/60">No discussions for this task yet.</p>
                   ) : (
                     comments.map((comment: any) => (
                       <div key={comment.id_komentar} className="flex gap-3">
@@ -1023,14 +1035,14 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                                     setEditCommentText(comment.isi_komentar);
                                   }}
                                   className="text-[#0E2F76]/40 hover:text-[#0E2F76] transition-colors"
-                                  title="Edit Komentar"
+                                  title="Edit Comment"
                                 >
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                                 </button>
                                 <button
                                   onClick={() => handleDeleteComment(comment.id_komentar)}
                                   className="text-[#0E2F76]/40 hover:text-red-500 transition-colors"
-                                  title="Hapus Komentar"
+                                  title="Delete Comment"
                                 >
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                 </button>
@@ -1055,13 +1067,13 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                                 onClick={() => handleUpdateComment(comment.id_komentar)}
                                 className="px-2 py-1 bg-[#0E2F76] text-white text-xs font-medium rounded-md hover:bg-blue-900"
                               >
-                                Simpan
+                                Save
                               </button>
                               <button
                                 onClick={() => setEditingCommentId(null)}
                                 className="px-2 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-medium rounded-md hover:bg-slate-50"
                               >
-                                Batal
+                                Cancel
                               </button>
                             </div>
                           ) : (
@@ -1079,7 +1091,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                     type="text"
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Tulis komentar..."
+                    placeholder="Write a comment..."
                     className="flex-1 border border-indigo-100 bg-white/80 shadow-sm p-3 rounded-xl text-sm focus:ring-2 focus:ring-[#0E2F76] outline-none transition"
                     disabled={isSubmittingComment}
                   />
@@ -1091,7 +1103,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                     {isSubmittingComment ? (
                       <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                     ) : (
-                      "Kirim"
+                      "Send"
                     )}
                   </button>
                 </form>
@@ -1103,7 +1115,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                   onClick={() => setIsDetailModalOpen(false)}
                   className="px-6 py-2.5 bg-white border border-slate-200 shadow-sm text-slate-700 font-medium rounded-xl hover:bg-slate-50 transition"
                 >
-                  Tutup
+                  Close
                 </button>
                 <button
                   onClick={() => handleMarkAsDone(selectedTask)}
@@ -1145,7 +1157,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                       <label className="block text-sm font-semibold text-[#0E2F76] mb-2">Task Title</label>
                       <input
                         type="text"
-                        placeholder="Judul Tugas..."
+                        placeholder="Task Title..."
                         value={formData.judul_task}
                         required
                         className="w-full border border-indigo-100 bg-white/80 shadow-sm p-3 rounded-xl text-sm focus:ring-2 focus:ring-[#0E2F76] outline-none transition"
@@ -1166,26 +1178,26 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                   {/* Kolom Kanan */}
                   <div className="flex flex-col gap-5">
                     <div>
-                      <label className="block text-sm font-semibold text-[#0E2F76] mb-2">Penanggung Jawab</label>
+                      <label className="block text-sm font-semibold text-[#0E2F76] mb-2">Assignee</label>
                       <select
                         required
                         value={formData.id_user}
                         className="w-full border border-indigo-100 bg-white/80 shadow-sm p-3 rounded-xl text-sm focus:ring-2 focus:ring-[#0E2F76] outline-none transition"
                         onChange={(e) => setFormData({ ...formData, id_user: e.target.value })}
                       >
-                        <option value="">Pilih Penanggung Jawab...</option>
+                        <option value="">Select Assignee...</option>
                         {users.map(u => <option key={u.id_user} value={u.id_user.toString()}>{u.nama_lengkap}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-[#0E2F76] mb-2">Kategori</label>
+                      <label className="block text-sm font-semibold text-[#0E2F76] mb-2">Category</label>
                       <select
                         required
                         value={formData.id_kategori}
                         className="w-full border border-indigo-100 bg-white/80 shadow-sm p-3 rounded-xl text-sm focus:ring-2 focus:ring-[#0E2F76] outline-none transition"
                         onChange={(e) => setFormData({ ...formData, id_kategori: e.target.value })}
                       >
-                        <option value="">Pilih Kategori...</option>
+                        <option value="">Select Category...</option>
                         {categories.map(c => <option key={c.id_kategori} value={c.id_kategori.toString()}>{c.nama_kategori}</option>)}
                       </select>
                     </div>
@@ -1287,7 +1299,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
               <div className="flex flex-col gap-3">
                 <h3 className="text-slate-800 font-bold font-['Inter'] flex items-center gap-2">
                   <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
-                  Tugas Saya
+                  My Tasks
                 </h3>
                 
                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
@@ -1306,7 +1318,7 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                         ))
                     ) : (
                       <li className="p-4 text-center text-sm text-slate-500 italic">
-                        Tidak ada tugas yang sedang ditugaskan.
+                        No tasks assigned.
                       </li>
                     )}
                   </ul>
@@ -1321,13 +1333,23 @@ export default function KanbanBoard({ projectId }: { projectId?: number }) {
                 onClick={() => setIsViewProfileModalOpen(false)}
                 className="px-5 py-2 bg-white border border-slate-200 text-slate-700 text-sm font-semibold rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
               >
-                Tutup
+                Close
               </button>
             </div>
             
           </div>
         </div>
       )}
+      {/* Custom Modal */}
+      <CustomModal
+        isOpen={modalState.isOpen}
+        title={modalState.title}
+        message={modalState.message}
+        type={modalState.type}
+        variant={modalState.variant}
+        onConfirm={modalState.onConfirm}
+        onCancel={modalState.onCancel}
+      />
     </div>
   );
 }

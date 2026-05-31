@@ -50,7 +50,7 @@ export async function POST(request: Request) {
 
     const inviterId = Number((session.user as any).id);
     const body = await request.json();
-    const { id_project, email_invitee } = body;
+    const { id_project, email_invitee, type = "project" } = body;
 
     // Check if inviter is admin of the project
     const projectMember = await prisma.tb_project_members.findUnique({
@@ -85,8 +85,12 @@ export async function POST(request: Request) {
       }
     });
 
-    if (existingMember) {
+    if (type === "project" && existingMember) {
       return NextResponse.json({ error: "User is already a member of this project" }, { status: 400 });
+    }
+
+    if (type === "role_change" && (!existingMember || existingMember.role !== "member")) {
+      return NextResponse.json({ error: "User is not a regular member of this project" }, { status: 400 });
     }
 
     // Check if invitation already exists
@@ -107,6 +111,7 @@ export async function POST(request: Request) {
         id_project: Number(id_project),
         id_inviter: inviterId,
         id_invitee: invitee.id_user,
+        type: type,
       }
     });
 
@@ -143,14 +148,32 @@ export async function PUT(request: Request) {
         data: { status: "accepted" }
       });
 
-      // Add user to project members
-      await prisma.tb_project_members.create({
-        data: {
-          id_project: invitation.id_project,
-          id_user: userId,
-          role: "member"
-        }
-      });
+      if (invitation.type === "role_change") {
+        // Upgrade invitee to admin
+        await prisma.tb_project_members.update({
+          where: {
+            id_project_id_user: { id_project: invitation.id_project, id_user: userId }
+          },
+          data: { role: "admin" }
+        });
+
+        // Downgrade inviter to member
+        await prisma.tb_project_members.update({
+          where: {
+            id_project_id_user: { id_project: invitation.id_project, id_user: invitation.id_inviter }
+          },
+          data: { role: "member" }
+        });
+      } else {
+        // Add user to project members
+        await prisma.tb_project_members.create({
+          data: {
+            id_project: invitation.id_project,
+            id_user: userId,
+            role: "member"
+          }
+        });
+      }
       return NextResponse.json({ message: "Invitation accepted" });
     } else if (action === "reject") {
       await prisma.tb_invitations.update({

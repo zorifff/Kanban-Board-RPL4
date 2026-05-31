@@ -28,7 +28,7 @@ export default function LoginPage() {
       setError(result.error);
       setIsLoading(false);
     } else {
-      router.push("/dashboard"); // Masuk ke Dashboard jika sukses
+      router.push("/dashboard"); // Go to Dashboard if successful
       router.refresh();
     }
   };
@@ -75,10 +75,10 @@ export default function LoginPage() {
 
           {/* Titles */}
           <h2 className="text-neutral-950 text-[28px] font-medium font-['Inter'] leading-9 text-center">
-            Selamat Datang Kembali
+            Welcome Back
           </h2>
           <p className="text-gray-500 text-base font-normal font-['Inter'] leading-6 mt-2 text-center">
-            Masuk untuk melanjutkan ke dashboard Anda
+            Sign in to continue to your dashboard
           </p>
         </div>
 
@@ -97,7 +97,7 @@ export default function LoginPage() {
                 type="email"
                 required
                 className="w-full bg-transparent outline-none text-neutral-950 text-base font-normal font-['Inter'] placeholder:text-neutral-950/50"
-                placeholder="nama@email.com"
+                placeholder="name@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
@@ -111,7 +111,7 @@ export default function LoginPage() {
                 type="password"
                 required
                 className="w-full bg-transparent outline-none text-neutral-950 text-base font-normal font-['Inter'] placeholder:text-neutral-950/50"
-                placeholder="Masukkan password"
+                placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
@@ -123,15 +123,15 @@ export default function LoginPage() {
             disabled={isLoading}
             className="w-full h-12 bg-blue-900 hover:bg-blue-800 text-white rounded-[10px] flex justify-center items-center text-base font-medium font-['Inter'] leading-6 transition-colors disabled:opacity-50"
           >
-            {isLoading ? "Memproses..." : "Masuk"}
+            {isLoading ? "Processing..." : "Sign In"}
           </button>
         </form>
 
         {/* Footer */}
         <div className="mt-6 flex justify-center items-center gap-1">
-          <span className="text-gray-500 text-base font-normal font-['Inter'] leading-6">Belum punya akun?</span>
+          <span className="text-gray-500 text-base font-normal font-['Inter'] leading-6">Don't have an account?</span>
           <Link href="/signup" className="text-blue-900 text-base font-medium font-['Inter'] leading-6 hover:underline">
-            Daftar sekarang
+            Sign up now
           </Link>
         </div>
 

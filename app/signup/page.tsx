@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { signIn } from "next-auth/react";
 import Link from "next/link";
 
 export default function SignUpPage() {
@@ -22,7 +21,7 @@ export default function SignUpPage() {
     setError("");
 
     try {
-      // 1. Kirim data ke API Register yang sudah kamu buat
+      // 1. Send data to your Register API
       const res = await fetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -32,23 +31,11 @@ export default function SignUpPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Gagal membuat akun");
+        throw new Error(data.error || "Failed to create account");
       }
 
-      // 2. Jika sukses buat akun, langsung otomatis Login!
-      const loginResult = await signIn("credentials", {
-        email: formData.email,
-        password: formData.password,
-        redirect: false,
-      });
-
-      if (loginResult?.error) {
-        setError("Akun berhasil dibuat, tapi gagal login otomatis. Silakan login manual.");
-        setIsLoading(false);
-      } else {
-        router.push("/"); // Arahkan ke Kanban Board
-        router.refresh();
-      }
+      // 2. If account creation is successful, redirect to login page
+      router.push("/login");
     } catch (err: any) {
       setError(err.message);
       setIsLoading(false);
@@ -97,10 +84,10 @@ export default function SignUpPage() {
 
           {/* Titles */}
           <h2 className="text-neutral-950 text-[28px] font-medium font-['Inter'] leading-9 text-center">
-            Buat Akun Baru
+            Create New Account
           </h2>
           <p className="text-gray-500 text-base font-normal font-['Inter'] leading-6 mt-1 text-center">
-            Mulai kelola task Anda dengan lebih baik
+            Start managing your tasks better
           </p>
         </div>
 
@@ -113,13 +100,13 @@ export default function SignUpPage() {
           )}
 
           <div className="flex flex-col gap-1 mb-4">
-            <label className="text-neutral-950 text-sm font-medium font-['Inter']">Nama Lengkap</label>
+            <label className="text-neutral-950 text-sm font-medium font-['Inter']">Full Name</label>
             <div className="h-11 px-4 py-3 bg-zinc-100 rounded-[10px] border border-black/10 flex items-center overflow-hidden focus-within:border-[#0E2F76] focus-within:ring-1 focus-within:ring-[#0E2F76] transition-all">
               <input 
                 type="text"
                 required
                 className="w-full bg-transparent outline-none text-neutral-950 text-sm font-normal font-['Inter'] placeholder:text-neutral-950/50"
-                placeholder="Masukkan nama lengkap"
+                placeholder="Enter full name"
                 value={formData.nama_lengkap}
                 onChange={(e) => setFormData({...formData, nama_lengkap: e.target.value})}
               />
@@ -127,13 +114,13 @@ export default function SignUpPage() {
           </div>
 
           <div className="flex flex-col gap-1 mb-4">
-            <label className="text-neutral-950 text-sm font-medium font-['Inter']">Nama Pengguna</label>
+            <label className="text-neutral-950 text-sm font-medium font-['Inter']">Username</label>
             <div className="h-11 px-4 py-3 bg-zinc-100 rounded-[10px] border border-black/10 flex items-center overflow-hidden focus-within:border-[#0E2F76] focus-within:ring-1 focus-within:ring-[#0E2F76] transition-all">
               <input 
                 type="text"
                 required
                 className="w-full bg-transparent outline-none text-neutral-950 text-sm font-normal font-['Inter'] placeholder:text-neutral-950/50"
-                placeholder="Masukkan nama pengguna"
+                placeholder="Enter username"
                 value={formData.username}
                 onChange={(e) => setFormData({...formData, username: e.target.value})}
               />
@@ -147,7 +134,7 @@ export default function SignUpPage() {
                 type="email"
                 required
                 className="w-full bg-transparent outline-none text-neutral-950 text-sm font-normal font-['Inter'] placeholder:text-neutral-950/50"
-                placeholder="nama@email.com"
+                placeholder="name@email.com"
                 value={formData.email}
                 onChange={(e) => setFormData({...formData, email: e.target.value})}
               />
@@ -161,7 +148,7 @@ export default function SignUpPage() {
                 type="password"
                 required
                 className="w-full bg-transparent outline-none text-neutral-950 text-sm font-normal font-['Inter'] placeholder:text-neutral-950/50"
-                placeholder="Masukkan password"
+                placeholder="Enter password"
                 value={formData.password}
                 onChange={(e) => setFormData({...formData, password: e.target.value})}
               />
@@ -173,15 +160,15 @@ export default function SignUpPage() {
             disabled={isLoading}
             className="w-full h-11 bg-[#0E2F76] hover:bg-blue-900 text-white rounded-[10px] flex justify-center items-center text-sm font-medium font-['Inter'] transition-colors disabled:opacity-50"
           >
-            {isLoading ? "Memproses..." : "Daftar Sekarang"}
+            {isLoading ? "Processing..." : "Sign Up Now"}
           </button>
         </form>
 
         {/* Footer */}
         <div className="mt-5 flex justify-center items-center gap-1">
-          <span className="text-gray-500 text-sm font-normal font-['Inter']">Sudah punya akun?</span>
+          <span className="text-gray-500 text-sm font-normal font-['Inter']">Already have an account?</span>
           <Link href="/login" className="text-[#0E2F76] text-sm font-medium font-['Inter'] hover:underline">
-            Masuk di sini
+            Sign in here
           </Link>
         </div>
 
